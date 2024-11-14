@@ -1,7 +1,6 @@
 import argparse
 import os
 import re
-
 import requests
 from rich.console import Console
 from rich.progress import track
@@ -38,7 +37,7 @@ def parse_arguments():
         nargs="+",
         default=["mongodb"],
         type=str,
-        help="A list of terms to search for in  the commits",
+        help="A list of terms to search for in the commits",
     )
 
     parser.add_argument("--output", "-o", help="Output files path")
@@ -49,15 +48,15 @@ def parse_arguments():
 
     args = parser.parse_args()
 
-    output_dir: str | None = args.output
-    queries: list[str] = args.query
-    terms: list[str] = args.terms
-    is_verbose: bool = args.verbose
+    output_dir = args.output  # No need for type hints here
+    queries = args.query
+    terms = args.terms
+    is_verbose = args.verbose
 
-    return (output_dir, queries, terms, is_verbose)
+    return output_dir, queries, terms, is_verbose
 
 
-def query_commits(query: str, output_dir: str | None) -> list[str]:
+def query_commits(query, output_dir):
     url = COMMIT_SEARCH_URL.format(query.replace(" ", "+"))
     verbose_print(f"searching: {url}")
 
@@ -66,18 +65,16 @@ def query_commits(query: str, output_dir: str | None) -> list[str]:
     if response.status_code != requests.codes.ok:
         verbose_print(f"Request failed with status code {response.status_code}")
         verbose_print(response.text)
-
         return []
 
     data = response.json()
-
     commits = list(map(extract_commit_details, data["items"]))
 
     commit_diffs = map(
         lambda commit: get_commit_diff(commit[0], commit[1], output_dir),
         track(
             commits,
-            disable=is_verbose,
+            disable=not is_verbose,
             description=f'Searching for "{query}"',
         ),
     )
@@ -89,7 +86,7 @@ def query_commits(query: str, output_dir: str | None) -> list[str]:
     return contents
 
 
-def get_commit_diff(repository: str, commit_hash: str, output_dir: str | None):
+def get_commit_diff(repository, commit_hash, output_dir):
     url = DIFF_URL.format(repository, commit_hash)
 
     try:
@@ -112,20 +109,18 @@ def get_commit_diff(repository: str, commit_hash: str, output_dir: str | None):
                 verbose_print(f"[+] grabbed {url}")
 
         return response.text
-    except:
-        verbose_print(f"[!] couldn't reach {url}")
+    except Exception as e:
+        verbose_print(f"[!] couldn't reach {url}: {e}")
 
 
 def extract_commit_details(item):
     repository = item["repository"]["full_name"]
     commit_hash = item["sha"]
-
     return repository, commit_hash
 
 
-def search_terms_in_commit(content: str, terms: list[str]):
+def search_terms_in_commit(content, terms):
     lines = content.split("\n")
-
     return list(
         filter(lambda line: re.search(REGEX.format("|".join(terms)), line), lines)
     )
